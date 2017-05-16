@@ -1,0 +1,4 @@
+* make regularisers applies to multiple variables
+* make an object so that user can implement its own operation (not Variable, but more like a Placeholder(Ops) )
+* implement indexing with variables (integer type)
+* complex numbers?
