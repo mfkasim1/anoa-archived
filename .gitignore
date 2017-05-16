@@ -37,4 +37,7 @@
 ehthumbs.db
 Thumbs.db
 
+# Folders #
+###########
 *.egg-info/
+dist/

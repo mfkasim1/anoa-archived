@@ -4,6 +4,8 @@ from .functions.logic import *
 from .functions.fftpack import *
 from .functions.array import *
 
+from .regularisers import *
+from .algorithms import *
 from .minimise import *
 from .core.ops import Variable
 
