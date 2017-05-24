@@ -2,3 +2,5 @@
 * make an object so that user can implement its own operation (not Variable, but more like a Placeholder(Ops) )
 * implement indexing with variables (integer type)
 * complex numbers?
+* make test for deshear
+* make self.shape available before the evaluation

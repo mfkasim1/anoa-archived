@@ -76,9 +76,9 @@ def main():
                     assert np.allclose(g.grad(val_dict)[v1], derivfuncs[i](np.ones(shape1), type=type, axis=axis, norm="ortho"))
                     
                     # inverse
-                    p = invfuncs[i](p, type=type, axis=axis)
-                    assert np.allclose(p.eval(val_dict), value1)
-                    g = an.sum(p)
+                    pp = invfuncs[i](p, type=type, axis=axis)
+                    assert np.allclose(pp.eval(val_dict), value1)
+                    g = an.sum(pp)
                     assert np.allclose(g.grad(val_dict)[v1], np.ones(shape1))
     
     # 2D variable test

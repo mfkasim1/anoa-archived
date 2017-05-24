@@ -6,12 +6,10 @@ import anoa.core.decorator as decor
 __all__ = ["Op", "Transform", "Variable"]
 
 class Op:
-    def __init__(self, children=None, parents=None, shape=None):
-        if children == None: self.children = []
-        else: self.children = children
-        
-        if parents == None: self.parents = []
-        else: self.parents = parents
+    def __init__(self, shape=None):
+        self.children = []
+        self.children_edge = []
+        self.parents = []
         
         if shape == None: self.shape = (1,)
         else: self.shape = shape
@@ -19,6 +17,9 @@ class Op:
         self.value = None
         self.gradient = None
         self.vars = []
+        self.grad_from_parents = {}
+        self.connection_from_parents = {}
+        self.need_children_values = True
     
     # this function is just to override the operators from numpy (solving __radd__, __rsub__, __r***__ problems)
     def __numpy_ufunc__(self, *a, **kw):
@@ -44,6 +45,7 @@ class Op:
         # assign the children and assign self as the parent
         for child in children:
             self.children.append(child)
+            self.children_edge.append(Edge(child, self))
             child.parents.append(self)
     
     def _add_op(self, x, opConst=None, opOp=None):
@@ -138,28 +140,57 @@ class Op:
     def __getitem__(self, key):
         return self._add_op(key, _Index_Const, _Index_Op)
     
-    def eval(self, values, reset_grad=False):
+    def eval(self, values):
+        """
+        Return the evaluated value of the op
+        
+        # Arguments:
+            values: dictionary of variables' values with variables as the keys and their values as values
+        
+        # Returns:
+            the evaluated value of the op
+        """
+        # set call_id as the id of the object
+        call_id = id(self)
+        
+        return self._eval(values, reset_grad=False, call_id=call_id)
+    
+    def _eval(self, values, reset_grad=False, call_id=None):
+        
+        # also assign the shape of the variable
+        def assign_value(val):
+            self.shape = val.shape
+            return val
+        
         if set(values.keys()) < set(self.vars): raise TypeError("all variable values must be specified")
         
-        if reset_grad: self.gradient = None
         if isinstance(self, Variable) and self in values.keys():
-            self.value = np.array(values[self])
-            self.shape = self.value.shape
+            self.value = assign_value(np.array(values[self]))
         
         # if it is an op non variables, then traverse down the tree
         else:
             childValues = []
             input_shapes = []
-            for child in self.children:
-                child_val = child.eval(values, reset_grad)
+            for edge in self.children_edge:
+                child = edge.child
+                child_val = child._eval(values, reset_grad, call_id=call_id)
                 childValues.append(child_val) # get the children's values
                 input_shapes.append(child_val.shape)
+                
+                if reset_grad:
+                    child.grad_from_parents[edge] = None
+                    child.connection_from_parents[edge] = call_id
             
-            # evaluate the function and assign the shapes
+            # assign the input_shape (it is used in some of the functions)
             self.input_shapes = input_shapes
             if len(self.children) == 1: self.input_shape = self.input_shapes[0]
-            self.value = np.array(self.forward(*childValues))
-            self.shape = self.value.shape
+            
+            # evaluate the function and assign the shapes
+            self.value = assign_value(np.array(self.forward(*childValues)))
+            
+            # if the node does not need its children value, then remove it to save memory
+            if not self.need_children_values:
+                for child in self.children: child.value = None
         
         return self.value
     
@@ -174,21 +205,23 @@ class Op:
         # Returns:
             a dictionary with variables as keys and their partial derivatives as the values
         """
+        call_id = id(self)
+        return self._grad(values, return_eval=return_eval, call_id=call_id)
+        
+    def _grad(self, values, return_eval=False, call_id=None):
         if set(values.keys()) < set(self.vars): raise TypeError("all variable values must be specified")
         
-        # if shape is available, then it must be 1
-        if type(self.shape) != type(None):
-            assert np.prod(self.shape) == 1
-        
         # evaluate all the children and reset the gradient to None
-        feval = self.eval(values, reset_grad=True)
+        feval = self._eval(values, reset_grad=True, call_id=call_id)
         
-        # check the size again after evaluation, in case it wasn't available before
+        # check the size, it must be a scalar or vector with size 1
         assert np.prod(self.shape) == 1, "the variable must be a scalar or vector with size 1"
         
         # initialise the gradient
         gradient = np.ones(self.shape)
-        self._assign_gradient_and_traverses_down(values, gradient)
+        
+        # traverses the gradient down to the leaves
+        self._assign_gradient_and_traverses_down(values, gradient, call_id)
         
         # construct the output dictionaries
         res = {}
@@ -204,7 +237,7 @@ class Op:
                 if len(var.shape) == len(var_grad.shape):
                     keep_dim = True
                     for i in xrange(len(var.shape)):
-                        if var.shape[i] != var_grad.shape[i]: # var.shape must be one in this case
+                        if var.shape[i] != var_grad.shape[i]: # var.shape[i] must be one in this case
                             sum_axis.append(i)
                 
                 # if it was broadcasted from a scalar
@@ -222,21 +255,60 @@ class Op:
         if return_eval: return feval, res
         else: return res
     
-    def _assign_gradient_and_traverses_down(self, values, gradient):
-        # assign the gradient
-        if type(self.gradient) == type(None): self.gradient = gradient
-        else: self.gradient += gradient
+    def _assign_gradient_and_traverses_down(self, values, gradient, call_id, edge_parent=None):
+        if edge_parent == None:
+            # assign the gradient
+            self.gradient = gradient
+        else:
+            # mark the gradient from the edge parent
+            self.grad_from_parents[edge_parent] = gradient
         
-        # propagate the gradient to the children
-        if len(self.children) > 0:
+        # get the connections for this call
+        current_connections = []
+        for ep in self.connection_from_parents.keys():
+            if self.connection_from_parents[ep] != call_id: continue
+            current_connections.append(ep)
+        
+        # check if all connections from the parent already have the gradient
+        all_connections_done = True
+        for ep in current_connections:
+            if self.grad_from_parents[ep] is None:
+                all_connections_done = False
+                break
+        
+        # if all connections already have gradients, calculate the gradient from its parents
+        if all_connections_done and edge_parent != None:
+            self.gradient = 0
+            
+            # examine all connections from the parents of this node
+            for ep in current_connections:
+                
+                # add the gradient from the parents
+                self.gradient += self.grad_from_parents[ep]
+                
+                # remove the saved gradient from parents to save memory
+                self.grad_from_parents[ep] = None
+        
+        # propagate the gradient to the children if all gradients from the parents are complete
+        if len(self.children) > 0 and all_connections_done:
+            
             # get the children's values first
-            child_values = []
-            for child in self.children: child_values.append(child.eval(values))
+            child_values = [child.value for child in self.children]
+            
+            # calculate the additional factor for the child gradient
+            child_gradient = self.adjoint(self.gradient, *child_values)
+            
+            # delete the gradient to save memory
+            self.gradient = None
             
             # traverses the gradient down to the children
-            child_gradient = self.adjoint(self.gradient, *child_values)
-            for i, child in enumerate(self.children):
-                child._assign_gradient_and_traverses_down(values, child_gradient[i])
+            for i, edge in enumerate(self.children_edge):
+                edge.child._assign_gradient_and_traverses_down(values, child_gradient[i], call_id, edge_parent=edge)
+
+class Edge:
+    def __init__(self, child, parent):
+        self.child = child
+        self.parent = parent
 
 class Transform(Op):
     def __init__(self, *op):
@@ -345,7 +417,6 @@ class _Index_Const(Transform):
     def forward(self, x):
         return np.array(x)[self.indices]
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         y = np.zeros(self.input_shape)

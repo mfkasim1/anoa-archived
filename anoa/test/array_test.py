@@ -14,14 +14,14 @@ def main(with_shape=1):
     val_dict2 = {v2:value2}
     
     # sum test
-    if True:
+    if False:
         p1 = an.sum(v)
         assert np.allclose(p1.eval(val_dict), np.sum(value))
         g1 = p1.grad(val_dict)
         assert np.allclose(g1[v], np.ones(shape))
     
     # shear test
-    if True:
+    if False:
         p2 = an.shear(v, shift_per_pixel=1, direction_axis=0, surface_normal_axis=1)
         assert np.allclose(p2.eval(val_dict), [[1,0,0],[4,2,0],[7,5,3],[0,8,6],[0,0,9]])
         p2s = an.sum(an.square(p2))/2.
@@ -48,7 +48,7 @@ def main(with_shape=1):
         assert np.allclose(p2s.grad(val_dict)[v], value)
     
     # shift test
-    if True:
+    if False:
         p3 = an.shift(v, shift=1, axis=0, boundary="periodic")
         assert np.allclose(p3.eval(val_dict), np.reshape([7,8,9, 1,2,3, 4,5,6], shape))
         p3s = an.sum(an.square(p3))/2.
@@ -155,7 +155,7 @@ def main(with_shape=1):
         assert np.allclose(p3s.grad(val_dict)[v], value * np.reshape([0,2,1, 0,2,1, 0,2,1], shape))
     
     # flip test
-    if True:
+    if False:
         p4 = an.flip(v, axis=0)
         assert np.allclose(p4.eval(val_dict), np.reshape([7,8,9, 4,5,6, 1,2,3], shape))
         p4s = an.sum(an.square(p4))/2.
@@ -167,7 +167,7 @@ def main(with_shape=1):
         assert np.allclose(p4s.grad(val_dict)[v], value)
     
     # rot90 test
-    if True:
+    if False:
         for k in [0,1,-1,2,-2]:
             for axis in [(0,1), (1,0)]:
                 p5 = an.rot90(v, k=k, axis=axis)
@@ -176,7 +176,7 @@ def main(with_shape=1):
                 assert np.allclose(p5s.grad(val_dict)[v], value)
     
     # min test
-    if True:
+    if False:
         p = an.min(v, axis=0)
         assert np.allclose(p.eval(val_dict), [1,2,3])
         ps = an.sum(an.square(p))/2.
@@ -198,7 +198,7 @@ def main(with_shape=1):
         assert np.allclose(ps.grad(val_dict)[v], value * np.reshape([1,0,0, 0,0,0, 0,0,0], shape))
     
     # max test
-    if True:
+    if False:
         p = an.max(v, axis=0)
         assert np.allclose(p.eval(val_dict), [7,8,9])
         ps = an.sum(an.square(p))/2.
@@ -220,10 +220,10 @@ def main(with_shape=1):
         assert np.allclose(ps.grad(val_dict)[v], value * np.reshape([0,0,0, 0,0,0, 0,0,1], shape))
     
     # sort test
-    if True:
+    if False:
         p = an.sort(v2, axis=0)
         assert np.allclose(p.eval(val_dict2), np.sort(value2, axis=0))
-        ps = an.sum(an.square(v2))/2.
+        ps = an.sum(an.square(p))/2.
         assert np.allclose(ps.grad(val_dict2)[v2], value2)
         
         p = an.sort(v2, axis=1)
@@ -236,6 +236,26 @@ def main(with_shape=1):
         ps = an.sum(an.square(p))/2.
         assert np.allclose(ps.grad(val_dict2)[v2], value2)
     
+    # multiple parents test
+    if True:
+        p = (v*1)+0
+        assert np.allclose(p.eval(val_dict), np.reshape([1,2,3, 4,5,6, 7,8,9], shape))
+        ps = an.sum(p)
+        assert np.allclose(ps.grad(val_dict)[v], np.ones(shape))
+        
+        p = v * 1
+        p2 = an.shift(p, shift=1, axis=0, boundary="periodic") + an.shift(p, shift=-1, axis=0, boundary="periodic")
+        assert np.allclose(p2.eval(val_dict), np.reshape([7,8,9, 1,2,3, 4,5,6], shape) + np.reshape([4,5,6, 7,8,9, 1,2,3], shape))
+        ps = an.sum(p2)
+        assert np.allclose(ps.grad(val_dict)[v], np.ones(shape)*2)
+        
+        pp = v * 1
+        p = pp + pp
+        p2 = an.shift(p, shift=1, axis=0, boundary="periodic") + an.shift(p, shift=-1, axis=0, boundary="periodic")
+        assert np.allclose(p2.eval(val_dict), np.reshape([7,8,9, 1,2,3, 4,5,6], shape)*2 + np.reshape([4,5,6, 7,8,9, 1,2,3], shape)*2)
+        ps = an.sum(p2)
+        assert np.allclose(ps.grad(val_dict)[v], np.ones(shape)*4)
+        
     
     print("2D array test %s shape completed" % ("with" if with_shape else "without"))
 

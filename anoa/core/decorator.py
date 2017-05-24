@@ -3,14 +3,14 @@ import numpy as np
 # function decorators
 def make_output_array(func):
     # make the output as an array
-    def intended_adjoint(obj, x, *op_vals):
-        return [func(obj, x, *op_vals)]
+    def intended_adjoint(*args, **kwargs):
+        return [func(*args, **kwargs)]
     return intended_adjoint
 
 def put_child_values_arguments(func):
-    # adding *op_vals argument at the end and output a list
+    # adding *op_vals argument at the end and output a list and make the output as a list
     def intended_adjoint(obj, x, *op_vals):
-        return func(obj, x)
+        return [func(obj, x)]
     return intended_adjoint
 
 def put_gradient_argument_and_output(func):
@@ -39,6 +39,7 @@ def linear_transform_initialisation(const_or_unary):
                 import anoa.core.ops as ops
                 func(obj, **kwargs)
                 ops.Transform.__init__(obj, *op)
+                obj.need_children_values = False
             return intended_init
         
         elif const_or_unary == "const":
@@ -48,6 +49,7 @@ def linear_transform_initialisation(const_or_unary):
                 import anoa.core.ops as ops
                 func(obj, c, **kwargs)
                 ops.Transform.__init__(obj, *op)
+                obj.need_children_values = False
             return intended_init
     
     return decorator

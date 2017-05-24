@@ -13,7 +13,6 @@ class _RMatmul_Const(ops.Transform):
     def forward(self, x):
         return np.matmul(self.matrix, x)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         return np.matmul(self.matrixT, x)
@@ -27,7 +26,6 @@ class _Matmul_Const(ops.Transform):
     def forward(self, x):
         return np.matmul(x, self.matrix)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         return np.matmul(x, self.matrixT)
@@ -55,7 +53,6 @@ class _Mask(ops.Transform):
     def forward(self, x):
         return x * self.mask
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         return x * self.mask
@@ -72,14 +69,12 @@ class _Sum(ops.Transform):
     def forward(self, x):
         return np.sum(x, axis=self.axis)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     @decor.normalise_axis
     def adjoint(self, x):
         # expand the axis to have the same dimension as self.shape
         x_expand = x
-        for axis in self.axis:
-            x_expand = np.expand_dims(x, axis)
+        for axis in self.axis: x_expand = np.expand_dims(x, axis)
         
         # copy the elements into the new axis
         return np.broadcast_to(x_expand, self.input_shape)
@@ -89,14 +84,16 @@ class _Shear(ops.Transform):
     ???
     """
     @decor.linear_transform_initialisation("unary")
-    def __init__(self, normal_shape=None, sheared_shape=None, shift_per_pixel=1, direction_axis=-1, surface_normal_axis=-2):
+    def __init__(self, shift_per_pixel=1, direction_axis=-1, surface_normal_axis=-2):
         self.shift_per_pixel = int(shift_per_pixel)
         self.direction_axis = direction_axis
         self.surface_normal_axis = surface_normal_axis
         self.shift_per_pixel = shift_per_pixel
+        self.normal_shape = None
+        self.sheared_shape = None
     
     def _assign_shape(self, normal_shape):
-        # convert the axis to positive
+        # convert the axis to non-negative axis
         ndim = len(normal_shape)
         self.normal_shape = normal_shape
         self.direction_axis = misc._positive_axis(self.direction_axis, ndim)
@@ -105,62 +102,92 @@ class _Shear(ops.Transform):
         # calculate the sheared shape
         self.sheared_shape = list(normal_shape)
         self.sheared_shape[self.direction_axis] = normal_shape[self.direction_axis] + (normal_shape[self.surface_normal_axis] - 1) * abs(self.shift_per_pixel)
+        self._get_indices()
     
-    def _assign_sheared_shape(self, sheared_shape):
-        # convert the axis to positive
-        ndim = len(sheared_shape)
-        self.sheared_shape = sheared_shape
-        self.direction_axis = misc._positive_axis(self.direction_axis, ndim)
-        self.surface_normal_axis = misc._positive_axis(self.surface_normal_axis, ndim)
+    def _get_indices(self):
+        # get the input index
+        idx_beginning = 0 if self.shift_per_pixel > 0 else self.sheared_shape[self.direction_axis]-self.normal_shape[self.direction_axis]
+        idx_end = self.normal_shape[self.direction_axis] if self.shift_per_pixel > 0 else self.sheared_shape[self.direction_axis]
+        self.input_index = np.index_exp[:] * (self.direction_axis) + np.index_exp[idx_beginning:idx_end] + np.index_exp[:] * (len(self.normal_shape) - self.direction_axis - 1)
         
-        # calculate the input shape
-        self.normal_shape = list(sheared_shape)
-        self.normal_shape[self.direction_axis] = sheared_shape[self.direction_axis] + (sheared_shape[self.surface_normal_axis] - 1) * abs(self.shift_per_pixel)
+        # roll index
+        index = np.index_exp[:] * self.surface_normal_axis
+        index_suffix = np.index_exp[:] * (len(self.normal_shape) - self.surface_normal_axis - 1)
+        self.roll_axis = (self.direction_axis - 1) if self.surface_normal_axis < self.direction_axis else self.direction_axis
+        self.roll_index = []
+        for i in range(self.normal_shape[self.surface_normal_axis]):
+            self.roll_index.append(index + (i,) + index_suffix)
     
     def forward(self, x):
-        self._assign_shape(self.input_shape)
+        if self.normal_shape is None or self.input_shape != self.normal_shape: self._assign_shape(self.input_shape)
         y = np.zeros(self.sheared_shape)
         
         # copy the input, x, to y first with zero padding in direction_axis
-        idx_beginning = 0 if self.shift_per_pixel > 0 else self.sheared_shape[self.direction_axis]-self.normal_shape[self.direction_axis]
-        idx_end = self.normal_shape[self.direction_axis] if self.shift_per_pixel > 0 else self.sheared_shape[self.direction_axis]
-        index = np.index_exp[:] * (self.direction_axis) + np.index_exp[idx_beginning:idx_end] + np.index_exp[:] * (len(self.normal_shape) - self.direction_axis - 1)
-        y[index] = x
+        y[self.input_index] = x
         
         # now roll the axis
-        # index to access the slice in surface_normal_axis
-        index = np.index_exp[:] * self.surface_normal_axis
-        index_suffix = np.index_exp[:] * (len(self.normal_shape) - self.surface_normal_axis - 1)
-        roll_axis = (self.direction_axis - 1) if self.surface_normal_axis < self.direction_axis else self.direction_axis
         for i in range(self.normal_shape[self.surface_normal_axis]):
             # get the i-th slice of the surface_normal_axis
-            index_i = index + (i,) + index_suffix
-            y[index_i] = np.roll(y[index_i], i * self.shift_per_pixel, axis=roll_axis)
+            y[self.roll_index[i]] = np.roll(y[self.roll_index[i]], i * self.shift_per_pixel, axis=self.roll_axis)
         
         return y
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, y):
         # transpose of shearing is just de-shearing (shear in the opposite direction)
         y_copy = np.copy(y)
         
         # roll back the axis
-        # index to access the slice in surface_normal_axis
-        index = np.index_exp[:] * self.surface_normal_axis
-        index_suffix = np.index_exp[:] * (len(self.normal_shape) - self.surface_normal_axis - 1)
-        roll_axis = (self.direction_axis - 1) if self.surface_normal_axis < self.direction_axis else self.direction_axis
         for i in range(self.normal_shape[self.surface_normal_axis]):
             # get the i-th slice of the surface_normal_axis
-            index_i = index + (i,) + index_suffix
-            y_copy[index_i] = np.roll(y_copy[index_i], -i * self.shift_per_pixel, axis=roll_axis)
+            y_copy[self.roll_index[i]] = np.roll(y_copy[self.roll_index[i]], -i * self.shift_per_pixel, axis=self.roll_axis)
         
         # truncate the array
-        idx_beginning = 0 if self.shift_per_pixel > 0 else self.sheared_shape[self.direction_axis]-self.normal_shape[self.direction_axis]
-        idx_end = self.normal_shape[self.direction_axis] if self.shift_per_pixel > 0 else self.sheared_shape[self.direction_axis]
-        index = np.index_exp[:] * (self.direction_axis) + np.index_exp[idx_beginning:idx_end] + np.index_exp[:] * (len(self.normal_shape) - self.direction_axis - 1)
-        x = y_copy[index]
+        x = y_copy[self.input_index]
         return x
+
+class _Deshear(_Shear):
+    """
+    ???
+    """
+    def _assign_sheared_shape(self, sheared_shape):
+        # convert the axis to non-negative axis
+        ndim = len(sheared_shape)
+        self.sheared_shape = sheared_shape
+        self.direction_axis = misc._positive_axis(self.direction_axis, ndim)
+        self.surface_normal_axis = misc._positive_axis(self.surface_normal_axis, ndim)
+        
+        # calculate the sheared shape
+        self.normal_shape = list(sheared_shape)
+        self.normal_shape[self.direction_axis] = sheared_shape[self.direction_axis] - (sheared_shape[self.surface_normal_axis] - 1) * abs(self.shift_per_pixel)
+        self._get_indices()
+    
+    def forward(self, y):
+        if self.sheared_shape is None or self.input_shape != self.sheared_shape: self._assign_sheared_shape(self.input_shape)
+        y_copy = np.copy(y)
+        
+        # roll back the axis
+        for i in range(self.normal_shape[self.surface_normal_axis]):
+            # get the i-th slice of the surface_normal_axis
+            y_copy[self.roll_index[i]] = np.roll(y_copy[self.roll_index[i]], -i * self.shift_per_pixel, axis=self.roll_axis)
+        
+        # truncate the array
+        x = y_copy[self.input_index]
+        return x
+    
+    @decor.put_child_values_arguments
+    def adjoint(self, x):
+        y = np.zeros(self.sheared_shape)
+        
+        # copy the input, x, to y first with zero padding in direction_axis
+        y[self.input_index] = x
+        
+        # now roll the axis
+        for i in range(self.normal_shape[self.surface_normal_axis]):
+            # get the i-th slice of the surface_normal_axis
+            y[self.roll_index[i]] = np.roll(y[self.roll_index[i]], i * self.shift_per_pixel, axis=self.roll_axis)
+        
+        return y
 
 class _Shift(ops.Transform):
     """
@@ -246,7 +273,6 @@ class _Shift(ops.Transform):
                 y[index] = x[index_input]
                 return y
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         # input checking
@@ -320,7 +346,6 @@ class _Flip(ops.Transform):
     def forward(self, x):
         return np.flip(x, self.axis)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         return np.flip(x, self.axis)
@@ -337,7 +362,6 @@ class _Rot90(ops.Transform):
     def forward(self, x):
         return np.rot90(x, self.k, self.axis)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         return np.rot90(x, -self.k, self.axis)
@@ -350,7 +374,6 @@ class _Transpose(ops.Transform):
     def forward(self, x):
         return np.transpose(x, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         if self.axes == None: return np.transpose(x)
@@ -415,8 +438,8 @@ class _Sort(ops.Transform): # ???
         self.idx_sorted_flat = self.idx_sorted_flat.astype(int)
         return np.take(x, self.idx_sorted_flat)
     
-    @decor.make_output_array
-    def adjoint(self, x, *child_values):
+    @decor.put_child_values_arguments
+    def adjoint(self, x):
         y = np.zeros(self.input_shape).flatten()
         y[self.idx_sorted_flat.flatten()] = x.flatten()
         return np.reshape(y, self.input_shape)
@@ -434,7 +457,6 @@ class _MaskedSum(ops.Transform):
     def forward(self, x):
         return np.matmul(self.masks_matrix, x.flatten()[:,None])
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         sig_flat = np.matmul(np.transpose(self.masks_matrix), x.flatten()[:,None])

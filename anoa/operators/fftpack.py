@@ -13,7 +13,6 @@ class _DCT(ops.Transform):
     def forward(self, x):
         return scft.dct(x, type=self.type, axis=self.axis, norm="ortho")
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.idct(grad, type=self.type, axis=self.axis, norm="ortho")
@@ -22,7 +21,6 @@ class _IDCT(_DCT):
     def forward(self, x):
         return scft.idct(x, type=self.type, axis=self.axis, norm="ortho")
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.dct(grad, type=self.type, axis=self.axis, norm="ortho")
@@ -31,7 +29,6 @@ class _DST(_DCT):
     def forward(self, x):
         return scft.dst(x, type=self.type, axis=self.axis, norm="ortho")
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.idst(grad, type=self.type, axis=self.axis, norm="ortho")
@@ -40,7 +37,6 @@ class _IDST(_DCT):
     def forward(self, x):
         return scft.idst(x, type=self.type, axis=self.axis, norm="ortho")
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.dst(grad, type=self.type, axis=self.axis, norm="ortho")
@@ -53,7 +49,6 @@ class _FFT(ops.Transform):
     def forward(self, x):
         return scft.fft(x, axis=self.axis)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.ifft(grad, axis=self.axis)
@@ -62,7 +57,6 @@ class _IFFT(_FFT):
     def forward(self, x):
         return scft.ifft(x, axis=self.axis)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.fft(grad, axis=self.axis)
@@ -78,7 +72,6 @@ class _DCT2(ops.Transform):
     def forward(self, x):
         return _DCTN.forward_static(x, type=self.type, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return _DCTN.adjoint_static(grad, type=self.type, axes=self.axes)
@@ -87,7 +80,6 @@ class _IDCT2(_DCT2):
     def forward(self, x):
         return _DCTN.adjoint_static(x, type=self.type, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return _DCTN.forward_static(grad, type=self.type, axes=self.axes)
@@ -96,7 +88,6 @@ class _DST2(_DCT2):
     def forward(self, x):
         return _DSTN.forward_static(x, type=self.type, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return _DSTN.adjoint_static(grad, type=self.type, axes=self.axes)
@@ -105,7 +96,6 @@ class _IDST2(_DCT2):
     def forward(self, x):
         return _DSTN.adjoint_static(x, type=self.type, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return _DSTN.forward_static(grad, type=self.type, axes=self.axes)
@@ -118,7 +108,6 @@ class _FFT2(ops.Transform):
     def forward(self, x):
         return scft.fft2(x, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.ifft2(grad, axes=self.axes)
@@ -127,7 +116,6 @@ class _IFFT2(_FFT2):
     def forward(self, x):
         return scft.ifft2(x, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.fft2(grad, axes=self.axes)
@@ -194,7 +182,6 @@ class _FFTN(_FFT2):
     def forward(self, x):
         return scft.fftn(x, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.ifftn(grad, axes=self.axes)
@@ -203,7 +190,6 @@ class _IFFTN(_FFT2):
     def forward(self, x):
         return scft.ifftn(x, axes=self.axes)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, grad):
         return scft.fftn(grad, axes=self.axes)

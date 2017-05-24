@@ -244,7 +244,7 @@ def owlqn(input_size, eval_fun, regulariser,
     ############################### argument check ###############################
     initial_x = _get_initial_x(initial_x, input_size)
     
-    _regulariser_fun = lambda x: regulariser * reg_l1(np.abs(x))
+    _regulariser_fun = lambda x: regulariser * np.sum(np.abs(x))
     _constraint_orthant = lambda var, orthant: var * (np.sign(var) == orthant)
     
     ############################### initialisation ###############################

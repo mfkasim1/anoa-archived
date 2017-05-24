@@ -70,11 +70,11 @@ def dctn(x, type=2, axes=None):
 def idctn(x, type=2, axes=None):
     return x._add_unary_op(pm._IDCTN, type=type, axes=axes)
 
-@unary_function(pm._DSTN.forward_static, "dctn")
+@unary_function(pm._DSTN.forward_static, "dstn")
 def dstn(x, type=2, axes=None):
     return x._add_unary_op(pm._DSTN, type=type, axes=axes)
 
-@unary_function(pm._DSTN.adjoint_static, "idctn")
+@unary_function(pm._DSTN.adjoint_static, "idstn")
 def idstn(x, type=2, axes=None):
     return x._add_unary_op(pm._IDSTN, type=type, axes=axes)
 

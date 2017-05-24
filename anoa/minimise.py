@@ -1,4 +1,5 @@
 import numpy as np
+import anoa as an
 import anoa.core.ops as ops
 import anoa.misc as misc
 
@@ -10,6 +11,17 @@ def minimise(loss, alg, reg=None, **kwargs):
     else:
         regulariser_function = reg.eval
         thresholding_function = reg.soft_thresholding
+    
+    # construct the kwargs according to algorithms
+    if alg is an.owlqn:
+        if reg == None:
+            kwargs['regulariser'] = 0
+        else:
+            kwargs['regulariser'] = reg.weights
+    else:
+        kwargs['regulariser'] = 1
+        kwargs['regulariser_function'] = regulariser_function
+        kwargs['thresholding_function'] = thresholding_function
     
     # list all variables that the loss variable depends on
     vars = loss.vars
@@ -23,9 +35,7 @@ def minimise(loss, alg, reg=None, **kwargs):
             feval, g = loss.grad({var: x}, return_eval=True)
             return feval, g[var]
         
-        return alg(input_size, eval_fun, 1,
-                   regulariser_function=regulariser_function,
-                   thresholding_function=thresholding_function, **kwargs)
+        return alg(input_size, eval_fun, **kwargs)
     
     # otherwise, flatten all the variables
     else:
@@ -50,7 +60,7 @@ def minimise(loss, alg, reg=None, **kwargs):
             
             return feval, grad
         
-        return alg(input_size, eval_fun, 1,
-                   regulariser_function=regulariser_function,
-                   thresholding_function=thresholding_function, **kwargs)
-    
+        return alg(input_size, eval_fun, **kwargs)
+        # return alg(input_size, eval_fun, 1,
+                   # regulariser_function=regulariser_function,
+                   # thresholding_function=thresholding_function, **kwargs)

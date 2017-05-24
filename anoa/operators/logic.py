@@ -6,7 +6,6 @@ class _Logical_Not(ops.Transform):
     def forward(self, x):
         return np.logical_not(x)
     
-    @decor.make_output_array
     @decor.put_child_values_arguments
     def adjoint(self, x):
         return np.zeros(x.shape)

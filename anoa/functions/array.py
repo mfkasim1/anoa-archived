@@ -4,7 +4,7 @@ from exceptions import *
 import anoa.core.array as pa
 from anoa.functions.decorator import unary_function, binary_function
 
-__all__ = ["sum", "shear", "shift", "flip", "rot90", "transpose", "max", "min", "sort", "matmul"]
+__all__ = ["sum", "shear", "deshear", "shift", "flip", "rot90", "transpose", "max", "min", "sort", "matmul"]
 
 @unary_function(np.sum, "sum")
 def sum(x, axis=None):
@@ -12,7 +12,11 @@ def sum(x, axis=None):
 
 @unary_function(None, "shear")
 def shear(x, shift_per_pixel=1, direction_axis=-1, surface_normal_axis=-2):
-    return x._add_unary_op(pa._Shear, normal_shape=x.shape, shift_per_pixel=shift_per_pixel, direction_axis=direction_axis, surface_normal_axis=surface_normal_axis)
+    return x._add_unary_op(pa._Shear, shift_per_pixel=shift_per_pixel, direction_axis=direction_axis, surface_normal_axis=surface_normal_axis)
+
+@unary_function(None, "deshear")
+def deshear(x, shift_per_pixel=1, direction_axis=-1, surface_normal_axis=-2):
+    return x._add_unary_op(pa._Deshear, shift_per_pixel=shift_per_pixel, direction_axis=direction_axis, surface_normal_axis=surface_normal_axis)
 
 @unary_function(np.roll, "shift")
 def shift(x, shift, axis=-1, boundary="periodic"):
